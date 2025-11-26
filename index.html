@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PROTOCOLO: BLACKWALL</title>
+    <style>
+        /* --- ESTÉTICA PADRÃO ARASAKA (JOGO) --- */
+        :root {
+            --primary-color: #ff003c; 
+            --success-color: #00ff41;
+            --secondary-color: #fcee0a;
+            --bg-color: #050505;
+            --panel-bg: rgba(20, 0, 5, 0.9);
+            --dim-color: #4a0d13;
+            --font-main: 'Courier New', monospace;
+            --blackwall-red: #ff3333; 
+            --blackwall-bg: #000000;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--primary-color);
+            font-family: var(--font-main);
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+        }
+
+        /* Container do Jogo */
+        .game-interface {
+            display: grid;
+            grid-template-columns: auto 320px;
+            gap: 20px;
+            width: 95%;
+            max-width: 1200px;
+            border: 2px solid var(--dim-color);
+            padding: 20px;
+            position: relative;
+            background: var(--panel-bg);
+            transition: opacity 0.5s;
+        }
+
+        /* --- BLACKWALL / TELA SECRETA --- */
+        #blackwall-screen {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: var(--blackwall-bg);
+            z-index: 100;
+            color: var(--blackwall-red);
+            padding: 40px;
+            box-sizing: border-box;
+            overflow-y: auto; /* Permite rolar */
+            font-family: 'Courier New', monospace;
+            text-shadow: 1px 0px 0px rgba(255, 0, 0, 0.4), -1px 0px 0px rgba(0, 0, 255, 0.4);
+            scroll-behavior: smooth; /* Ajuda na suavidade */
+        }
+
+        /* Scanlines */
+        #blackwall-screen::before {
+            content: " ";
+            display: block;
+            position: fixed;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            z-index: 101;
+            background-size: 100% 3px, 4px 100%;
+            pointer-events: none;
+        }
+
+        /* Esconde a barra de rolagem para ficar mais limpo (opcional) */
+        #blackwall-screen::-webkit-scrollbar {
+            width: 8px;
+            background: #000;
+        }
+        #blackwall-screen::-webkit-scrollbar-thumb {
+            background: var(--dim-color);
+        }
+
+        .bw-content {
+            max-width: 900px;
+            margin: 0 auto;
+            white-space: pre-wrap;
+            font-size: 1.1rem; 
+            line-height: 1.6;  
+            opacity: 0.95;
+            padding-bottom: 100px; /* Espaço extra no final */
+        }
+
+        .bw-header {
+            font-size: 1.6rem;
+            font-weight: bold;
+            border-bottom: 1px solid var(--blackwall-red);
+            margin-bottom: 20px;
+            margin-top: 30px;
+            padding-bottom: 5px;
+            text-transform: uppercase;
+            animation: glitch-text 4s infinite; 
+        }
+
+        .bw-section {
+            margin-bottom: 25px;
+            border-left: 1px solid var(--dim-color);
+            padding-left: 20px;
+        }
+
+        .bw-highlight {
+            color: #fff;
+            background: rgba(255, 26, 26, 0.6);
+            padding: 0 5px;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 10px;
+            height: 18px;
+            background-color: var(--blackwall-red);
+            animation: blink 0.5s infinite;
+            vertical-align: middle;
+        }
+
+        @keyframes blink { 50% { opacity: 0; } }
+        
+        @keyframes flicker-text {
+            0% { opacity: 1; }
+            50% { opacity: 0.85; }
+            100% { opacity: 1; }
+        }
+
+        @keyframes glitch-text {
+            0% { transform: translate(0); }
+            95% { transform: translate(0); }
+            96% { transform: translate(-1px, 1px); }
+            97% { transform: translate(-1px, -1px); }
+            98% { transform: translate(1px, 1px); }
+            99% { transform: translate(1px, -1px); }
+            100% { transform: translate(0); }
+        }
+
+        #typewriter-output {
+            animation: flicker-text 0.15s infinite;
+        }
+
+        /* --- ESTILOS DO JOGO (Mantidos) --- */
+        .header-bar { grid-column: 1 / -1; display: flex; justify-content: space-between; border-bottom: 1px solid var(--primary-color); padding-bottom: 10px; margin-bottom: 10px; }
+        .header-title { font-size: 1.5rem; font-weight: bold; letter-spacing: 4px; }
+        .matrix-panel { border-right: 1px solid var(--dim-color); padding-right: 30px; }
+        .matrix-grid { display: grid; gap: 8px; margin-top: 10px; }
+        .code-cell { width: 55px; height: 35px; display: flex; justify-content: center; align-items: center; cursor: pointer; font-weight: bold; font-size: 1.1rem; transition: 0.1s; border: 1px solid transparent; }
+        .code-cell:hover { background-color: var(--primary-color); color: #000; box-shadow: 0 0 15px var(--primary-color); }
+        .code-cell.inactive { opacity: 0.2; cursor: not-allowed; }
+        .code-cell.active-axis { background-color: rgba(255, 0, 60, 0.15); border: 1px solid rgba(255, 0, 60, 0.4); }
+        .code-cell.selected { color: var(--dim-color); border: 1px solid var(--dim-color); opacity: 0.4; pointer-events: none; }
+        .info-panel { display: flex; flex-direction: column; gap: 25px; }
+        .timer-box { border: 1px solid var(--primary-color); padding: 10px; text-align: right; background: rgba(0,0,0,0.3); }
+        .timer-val { font-size: 2.5rem; font-weight: bold; color: var(--primary-color); }
+        .buffer-display { display: flex; gap: 5px; margin-top: 10px; flex-wrap: wrap; }
+        .buffer-slot { width: 35px; height: 35px; border: 1px dashed var(--dim-color); display: flex; justify-content: center; align-items: center; font-size: 1rem; color: var(--secondary-color); }
+        .buffer-slot.filled { border: 1px solid var(--primary-color); background: rgba(255,0,60,0.1); }
+        .target-sequence { display: flex; gap: 12px; font-size: 1.3rem; margin-top: 5px; padding: 10px; background: rgba(0,0,0,0.2); }
+        .seq-item.matched { color: var(--success-color); text-shadow: 0 0 8px var(--success-color); font-weight: bold; border-bottom: 2px solid var(--success-color); }
+        .footer-bar { grid-column: 1 / -1; display: flex; justify-content: space-between; border-top: 1px solid var(--primary-color); padding-top: 10px; font-size: 0.75rem; margin-top: 10px; text-transform: uppercase; }
+        .log-window { font-size: 0.7rem; color: var(--primary-color); opacity: 0.8; border-top: 1px solid var(--dim-color); padding-top: 10px; height: 120px; overflow-y: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+        #fail-modal { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5,5,5,0.95); z-index: 20; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+        
+    </style>
+</head>
+<body>
+
+    <div class="game-interface" id="game-ui">
+        <div class="header-bar">
+            <div class="header-title">ARASAKA CORP.</div>
+            <div style="font-size: 0.8rem; text-align: right; opacity: 0.8;">
+                SUBNET: MIKOSHI_DB<br>SEC_LEVEL: BLACKWALL
+            </div>
+        </div>
+
+        <div class="matrix-panel">
+            <h2 style="margin: 0 0 10px 0; font-size: 0.9rem; border-bottom: 1px solid var(--dim-color); color: var(--primary-color);">MATRIZ DE CÓDIGO</h2>
+            <div class="matrix-grid" id="grid"></div>
+        </div>
+
+        <div class="info-panel">
+            <div class="timer-box">
+                <span style="font-size: 0.7rem; letter-spacing: 2px;">TEMPO DE INVASÃO</span><br>
+                <span class="timer-val" id="timer">45.00</span>
+            </div>
+
+            <div>
+                <h2 style="font-size: 0.9rem; color: var(--primary-color);">BUFFER DE MEMÓRIA</h2>
+                <div class="buffer-display" id="buffer"></div>
+            </div>
+
+            <div>
+                <h2 style="font-size: 0.9rem; color: var(--primary-color);">SEQUÊNCIA ALVO</h2>
+                <div class="target-sequence" id="target-seq-display"></div>
+            </div>
+
+            <div class="log-window" id="logs">
+                > SISTEMA OPERACIONAL...<br>> AGUARDANDO INPUT...
+            </div>
+        </div>
+
+        <div class="footer-bar">
+            <span>SERVIDOR: 192.168.0.55 // TÓQUIO</span>
+            <span style="color: var(--secondary-color);">ALERTA: RASTREAMENTO ATIVO</span>
+        </div>
+
+        <div id="fail-modal">
+            <h1 style="font-size:3rem; color: var(--primary-color);">FALHA CRÍTICA</h1>
+            <p style="letter-spacing: 2px; margin-bottom: 20px;">CONEXÃO BLOQUEADA PELA NETWATCH</p>
+            <button onclick="location.reload()" style="padding: 10px 30px; background: transparent; border: 1px solid red; color: red; cursor: pointer;">REBOOT</button>
+        </div>
+    </div>
+
+    <div id="blackwall-screen">
+        <div class="bw-content">
+            <div id="typewriter-output"></div>
+            <span class="cursor"></span>
+        </div>
+    </div>
+
+    <script>
+        // CONFIGURAÇÕES
+        const config = {
+            cols: 6, rows: 8, seqLength: 5, bufferSize: 7, timeLimit: 45.00,
+            hexCodes: ['1C', '55', 'E9', 'BD', '7A', 'FF']
+        };
+
+        let state = {
+            matrix: [], targetSeq: [], buffer: [],
+            currentRow: 0, currentCol: null, isHorizontal: true,
+            gameStarted: false, gameOver: false, timerVal: config.timeLimit, timerRef: null
+        };
+
+        const els = {
+            grid: document.getElementById('grid'),
+            buffer: document.getElementById('buffer'),
+            target: document.getElementById('target-seq-display'),
+            timer: document.getElementById('timer'),
+            logs: document.getElementById('logs'),
+            gameUI: document.getElementById('game-ui'),
+            failModal: document.getElementById('fail-modal'),
+            blackwallScreen: document.getElementById('blackwall-screen'),
+            bwOutput: document.getElementById('typewriter-output')
+        };
+
+        // --- O TEXTO SECRETO ---
+        const secretText = `
+<div class="bw-header">ACESSO SEGURO: NÍVEL ÔMEGA</div>
+<div class="bw-header" style="font-size: 1rem; border: none; margin-top:0;">ORIGEM: SERVIDOR SUBTERRÂNEO - DIAMANTE NEGRO</div>
+
+<div class="bw-section">
+    <strong>PROJETO:</strong> MIKOSHI (みこし)<br>
+    <strong>STATUS DO SISTEMA:</strong> OPERACIONAL<br>
+    <strong>CONSUMO DE ENERGIA:</strong> 98% DA CAPACIDADE DO REATOR<br>
+    <strong>PRODUTIVIDADE DE DADOS:</strong> <span class="bw-highlight">ALTA</span>
+</div>
+
+<div class="bw-header">DEFINIÇÃO E PROPÓSITO</div>
+<div class="bw-section">
+    O Projeto Mikoshi (A Prisão de Almas) foi reconfigurado sob ordens diretas de Yoshida Arasaka. A função de preservação de engramas foi desativada. A função atual é <strong>Extração e Conversão</strong>, visando o armazenamento na Barreira Negra.<br><br>
+    A "Singularidade" requer um nível de processamento que excede a capacidade de hardware de silício. A única fonte de energia capaz de sustentar a fusão da consciência biológica com a digital é a <strong>Bioeletricidade Neural Pura</strong>; popularmente conhecida como "alma".
+</div>
+
+<div class="bw-header">PROTOCOLO DE ALIMENTAÇÃO</div>
+<div class="bw-section">
+    <strong>Método:</strong> Extração Neural Forçada via cadeira de conexão.<br>
+    <strong>Processo:</strong> O sujeito é conectado. A consciência é digitalizada e arrancada do corpo físico. O corpo entra em estado vegetativo e é descartado ou mantido em estase como "processador orgânico secundário".<br>
+    <strong>Resultado:</strong> O engrama (alma) é fragmentado e inserido no núcleo da Singularidade para alimentar sua expansão cognitiva.<br><br>
+    <span style="border: 1px solid var(--blackwall-red); padding: 2px;">NOTA TÉCNICA:</span> Cada engrama consumido aumenta a capacidade de processamento da Singularidade em 0.04%.<br>
+    <strong>Estimativa para Transcedência Total:</strong> 1.000+ Extrações de Nível VIP
+</div>
+
+<div class="bw-header">REGISTROS DE PROTOTIPAGEM</div>
+<div class="bw-section">
+    [EXPERIMENTO: ETHAN JONES]<br>
+    Sujeito: Ethan Jones [ID: REDACTED]<br>
+    Status: <span class="bw-highlight">ESTÁVEL / Desaparecido</span><br>
+    Análise: Durante a extração parcial de memória (Incidente: Laboratório 4), o sujeito demonstrou uma resistência anômala. Sua arquitetura neural não rejeitou a intrusão; ela se adaptou.<br><br>
+    Nota do Supervisor: Ethan Jones possui uma compatibilidade única. Um possível Receptáculo Reserva.<br>
+    Ação Recomendada: Monitorar à distância. Não eliminar. Se a Singularidade Principal falhar, o Sujeito Jones será o plano de contingência.
+</div>
+
+<div class="bw-header">STATUS ATUAL DA SINGULARIDADE</div>
+<div class="bw-section">
+    Estabilidade: 45% (Crítica). Requer mais dados.
+</div>
+
+<br>
+<div style="border: 1px solid var(--blackwall-red); padding: 15px; text-align: center; background: rgba(255, 0, 0, 0.05);">
+    <h3 style="margin:0;">ALERTA DE SISTEMA - ANOMALIA DETECTADA</h3>
+    <br>
+    Alvos: 3 faces ainda não cadastradas no sistema, não localizadas.<br>
+    Assinatura: Compatível com fragmentos de código da Singularidade.<br>
+    Possibilidade de Evasão: Não.<br>
+    Status: Vivas.<br>
+    Diretriz: A assimilação é inevitável.<br>
+    Próxima Colheita: Evento Diamante Negro.<br>
+    Potencial de processamento estimado: <strong>ILIMITADO</strong>.
+</div>
+`;
+
+        function init() {
+            createBufferSlots();
+            generateLevel();
+            renderGrid();
+            renderTarget();
+            log("> SEQUÊNCIA IDENTIFICADA.");
+        }
+
+        // Funções de Geração
+        function createBufferSlots() {
+            els.buffer.innerHTML = '';
+            for(let i=0; i<config.bufferSize; i++) {
+                let d = document.createElement('div');
+                d.className = 'buffer-slot';
+                els.buffer.appendChild(d);
+            }
+        }
+
+        function generateLevel() {
+            state.matrix = Array(config.rows).fill().map(() => Array(config.cols).fill(null));
+            state.targetSeq = [];
+            let r = 0, c = Math.floor(Math.random() * config.cols), horizontal = true, path = [];
+            
+            let code = getRandomHex();
+            state.matrix[r][c] = code;
+            state.targetSeq.push(code);
+            path.push(`${r},${c}`);
+            horizontal = false;
+
+            for(let i=1; i<config.seqLength; i++) {
+                let attempts = 0, found = false, nextR, nextC;
+                while(!found && attempts < 100) {
+                    attempts++;
+                    if(horizontal) { nextR = r; nextC = Math.floor(Math.random() * config.cols); } 
+                    else { nextR = Math.floor(Math.random() * config.rows); nextC = c; }
+
+                    if(!path.includes(`${nextR},${nextC}`) && (nextR !== r || nextC !== c)) {
+                        if(state.matrix[nextR][nextC] === null) { found = true; r = nextR; c = nextC; }
+                    }
+                }
+                if(!found) return generateLevel();
+                code = getRandomHex();
+                state.matrix[r][c] = code;
+                state.targetSeq.push(code);
+                path.push(`${r},${c}`);
+                horizontal = !horizontal;
+            }
+
+            for(let rr=0; rr<config.rows; rr++){
+                for(let cc=0; cc<config.cols; cc++){
+                    if(state.matrix[rr][cc] === null) state.matrix[rr][cc] = getRandomHex();
+                }
+            }
+        }
+
+        function getRandomHex() { return config.hexCodes[Math.floor(Math.random() * config.hexCodes.length)]; }
+
+        function renderGrid() {
+            els.grid.innerHTML = '';
+            els.grid.style.gridTemplateColumns = `repeat(${config.cols}, 55px)`;
+            for(let r=0; r<config.rows; r++){
+                for(let c=0; c<config.cols; c++){
+                    const cell = document.createElement('div');
+                    cell.className = 'code-cell';
+                    cell.innerText = state.matrix[r][c];
+                    cell.dataset.r = r; cell.dataset.c = c;
+                    cell.onclick = () => handleClick(r, c);
+                    if(r === 0) cell.classList.add('active-axis');
+                    else cell.classList.add('inactive');
+                    els.grid.appendChild(cell);
+                }
+            }
+        }
+
+        function renderTarget() { els.target.innerHTML = state.targetSeq.map(val => `<div class="seq-item">${val}</div>`).join(''); }
+
+        function handleClick(r, c) {
+            if(state.gameOver) return;
+            if(!state.gameStarted) { state.gameStarted = true; startTimer(); log("> INVASÃO INICIADA..."); }
+
+            let valid = false;
+            if(state.buffer.length === 0) { if(r === 0) valid = true; }
+            else {
+                const isRow = state.isHorizontal && r === state.currentRow;
+                const isCol = !state.isHorizontal && c === state.currentCol;
+                if(isRow || isCol) valid = true;
+            }
+            
+            const cell = document.querySelector(`.code-cell[data-r="${r}"][data-c="${c}"]`);
+            if(cell.classList.contains('selected')) valid = false;
+            if(!valid) { log("> ERRO: ACESSO NEGADO."); return; }
+
+            state.buffer.push(state.matrix[r][c]);
+            state.currentRow = r; state.currentCol = c; state.isHorizontal = !state.isHorizontal;
+
+            cell.classList.add('selected'); cell.innerText = '[]';
+            updateUI(); checkWinCondition();
+        }
+
+        function updateUI() {
+            const slots = document.querySelectorAll('.buffer-slot');
+            state.buffer.forEach((code, i) => { if(slots[i]) { slots[i].innerText = code; slots[i].classList.add('filled'); } });
+            
+            document.querySelectorAll('.code-cell').forEach(cell => {
+                cell.classList.remove('active-axis', 'inactive');
+                if(cell.classList.contains('selected')) return;
+                const r = parseInt(cell.dataset.r), c = parseInt(cell.dataset.c);
+                let active = state.isHorizontal ? (r === state.currentRow) : (c === state.currentCol);
+                cell.classList.add(active ? 'active-axis' : 'inactive');
+            });
+
+            document.querySelectorAll('.seq-item').forEach(el => el.classList.remove('matched'));
+            let matchCount = 0;
+            for (let i = 0; i < state.buffer.length; i++) {
+                const sub = state.buffer.slice(i);
+                let isMatch = true;
+                for(let j=0; j<sub.length; j++) if(sub[j] !== state.targetSeq[j]) isMatch = false;
+                if(isMatch) { matchCount = sub.length; break; }
+            }
+            for(let k=0; k<matchCount; k++) document.querySelectorAll('.seq-item')[k].classList.add('matched');
+        }
+
+        function checkWinCondition() {
+            const bufferStr = state.buffer.join('');
+            const targetStr = state.targetSeq.join('');
+            if(bufferStr.includes(targetStr)) { endGame(true); return; }
+            if(state.buffer.length >= config.bufferSize) { endGame(false); }
+        }
+
+        function startTimer() {
+            state.timerRef = setInterval(() => {
+                state.timerVal -= 0.09;
+                els.timer.innerText = state.timerVal.toFixed(2);
+                if(state.timerVal <= 0) { els.timer.innerText = "00.00"; endGame(false); }
+            }, 90);
+        }
+
+        function log(txt) {
+            const l = document.createElement('div'); l.innerText = txt;
+            els.logs.appendChild(l); els.logs.scrollTop = els.logs.scrollHeight;
+        }
+
+        function endGame(win) {
+            state.gameOver = true;
+            clearInterval(state.timerRef);
+
+            if(win) {
+                els.gameUI.style.opacity = '0';
+                setTimeout(() => {
+                    els.gameUI.style.display = 'none';
+                    els.blackwallScreen.style.display = 'block';
+                    typeWriterHTML(secretText, els.bwOutput);
+                }, 1000);
+            } else {
+                els.failModal.style.display = 'flex';
+            }
+        }
+
+        function typeWriterHTML(html, element) {
+            let i = 0;
+            const tempDiv = document.createElement("div");
+            tempDiv.innerHTML = html;
+            
+            element.innerHTML = "";
+            let content = html;
+            let currentIdx = 0;
+            
+            // Referência ao container para fazer o scroll
+            const scrollContainer = document.getElementById('blackwall-screen');
+
+            function type() {
+                if (currentIdx < content.length) {
+                    if (content[currentIdx] === '<') {
+                        let tagEnd = content.indexOf('>', currentIdx);
+                        if (tagEnd !== -1) {
+                            element.innerHTML += content.substring(currentIdx, tagEnd + 1);
+                            currentIdx = tagEnd + 1;
+                            setTimeout(type, 10);
+                            
+                            // Scroll automático rápido para tags
+                            scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                            return;
+                        }
+                    }
+                    
+                    element.innerHTML += content[currentIdx];
+                    currentIdx++;
+                    
+                    // AUTO-SCROLL: Força a tela a descer
+                    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+
+                    // Delay um pouco maior para ficar "tranquilo"
+                    let delay = Math.random() * 30 + 15; 
+                    setTimeout(type, delay);
+                }
+            }
+            type();
+        }
+
+        init();
+    </script>
+</body>
+</html>
